@@ -32,10 +32,12 @@ try {
   $exe = Join-Path $InstallDir 'HinoAddonManager.exe'
   if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { Fail 'The installed Hino executable was not found.' }
   $installed = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object {
-    $_.DisplayName -eq 'Hino Addon Manager' -and $_.DisplayVersion -eq $ExpectedVersion -and
-    $_.InstallLocation -and ($_.InstallLocation.TrimEnd('\') -ieq $InstallDir.TrimEnd('\'))
+    $_.DisplayName -eq 'Hino Addon Manager' -and $_.DisplayVersion -eq $ExpectedVersion
   } | Select-Object -First 1
-  if (-not $installed) { Fail ('Cannot verify installed version ' + $ExpectedVersion + ' in Windows Installed Apps.') }
+  if (-not $installed) { Fail ('Cannot verify installed version ' + $ExpectedVersion + ' in Windows Installed Apps. Check setup log before retrying.') }
+  # InstallLocation is optional in Inno Setup's uninstall record. Verify the
+  # executable at the expected location instead of rejecting valid installs.
+  Record ('Uninstall record verified for ' + $ExpectedVersion)
   Record ('Verified installed version ' + $ExpectedVersion + '; restarting app.')
   Start-Process -FilePath $exe | Out-Null
 } catch { Fail $_.Exception.Message }
