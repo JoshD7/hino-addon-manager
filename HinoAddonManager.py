@@ -366,6 +366,27 @@ def cf_files(api_key, project_id):
     if not isinstance(data,list):raise ValueError('Unexpected file results')
     return [{'id':f.get('id'),'name':f.get('displayName') or f.get('fileName',''), 'versions':f.get('gameVersions') or [],'date':f.get('fileDate',''), 'releaseType':f.get('releaseType')} for f in data if isinstance(f,dict)]
 
+def cf_official_url(mod, file=None):
+    """Only open API-provided official CurseForge WoW URLs."""
+    from urllib.parse import urlsplit
+    site=(mod.get('links') or {}).get('websiteUrl','') if isinstance(mod,dict) else ''
+    parts=urlsplit(str(site))
+    if parts.scheme!='https' or (parts.hostname or '').lower() not in ('curseforge.com','www.curseforge.com'):
+        raise ValueError('No verified official CurseForge project URL.')
+    if not parts.path.startswith('/wow/addons/'):
+        raise ValueError('Unexpected CurseForge project URL.')
+    base='https://www.curseforge.com'+parts.path.rstrip('/')
+    if file is None:return base
+    fid=file.get('id') if isinstance(file,dict) else None
+    if not isinstance(fid,int) or fid<=0:raise ValueError('Missing CurseForge file ID.')
+    return base+'/files/'+str(fid)
+
+def cf_mod(api_key, project_id):
+    if not re.fullmatch(r'\d{1,12}',str(project_id)):raise ValueError('Invalid CurseForge project ID')
+    result=cf_request(api_key,f'/mods/{project_id}')
+    if not isinstance(result,dict):raise ValueError('Unexpected CurseForge project information')
+    return result
+
 def cf_forever_evidence(file):
     versions=[str(x).lower() for x in file.get('versions',[]) if isinstance(x,(str,int))]
     return any('1.60.1' in x or 'forever' in x for x in versions)
@@ -719,7 +740,7 @@ def download_asset(asset, target, progress=None, cancelled=None, max_seconds=150
 
 class GUI:
  def __init__(self,root):
-    self.root=root;root.title('Hino Addon Manager V4.0.3 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
+    self.root=root;root.title('Hino Addon Manager V4.1.0 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
     self.cfg=load_config();self.items=[];self.busy=False;self.results={};self.cancel_event=threading.Event();self.update_in_progress=False;self.expanded_addon=None;self.collapsed_groups={'Bagnon family','GearQuest Forever','Questie + QuestieDB','Polestar Guides'};self.backup_paths=[];self._backup_loaded=False;self._backup_loading=False;self._backup_request=0
     # V3.7 visual system: editorial, charcoal-and-ivory desktop workspace.
     # Intentionally replaces the old green sidebar and dashboard identity.
@@ -899,6 +920,8 @@ class GUI:
     details=tk.Frame(browser,bg=panel,padx=16,pady=12,highlightbackground=edge,highlightthickness=1)
     detail_heading=tk.Frame(details,bg=panel);detail_heading.pack(fill='x',pady=(0,8))
     tk.Label(detail_heading,text='Release details',bg=panel,fg=fg,font=('Segoe UI',12,'bold')).pack(side='left')
+    ttk.Button(detail_heading,text='Install downloaded ZIP',command=self.local_zip).pack(side='right',padx=(7,0))
+    ttk.Button(detail_heading,text='Open Forever release',command=self.cf_open_release).pack(side='right',padx=(7,0))
     ttk.Button(detail_heading,text='View selected files',command=self.cf_show_files).pack(side='right')
     self.cf_info=tk.StringVar(value='Search CurseForge, then select an addon to inspect its Forever releases.')
     tk.Label(details,textvariable=self.cf_info,bg=panel,fg=muted,wraplength=700,justify='left',anchor='w').pack(fill='x',pady=(0,7))
@@ -1061,6 +1084,27 @@ class GUI:
         self.cf_detail_text.configure(state='disabled')
     self.task(lambda:cf_files(key,project),done)
 
+ def cf_open_release(self):
+    """Open the latest explicitly Forever-labelled official file page."""
+    if self.busy:return
+    sel=self.cf_tree.selection()
+    if not sel:messagebox.showinfo(APP,'Select a CurseForge project first.');return
+    project=str(self.cf_tree.item(sel[0],'values')[0]);key=self.cf_key.get().strip()
+    if not key:messagebox.showinfo(APP,'Enter the CurseForge API key in Settings.');return
+    self.cf_info.set('Looking up official Forever release...')
+    def work():
+        mod=cf_mod(key,project)
+        files=[f for f in cf_files(key,project) if cf_forever_evidence(f)]
+        chosen=next((f for f in files if isinstance(f.get('id'),int)),None)
+        return cf_official_url(mod,chosen),bool(chosen)
+    def done(result,error):
+        self.busy=False
+        if error:self.cf_info.set('Could not verify release page: '+error);return
+        url,found=result
+        self.cf_info.set('Opening '+('an official Forever-labelled release.' if found else 'the official project page; Forever release not verified.'))
+        webbrowser.open(url)
+    self.task(work,done)
+
  def periodic_update_check(self):
     # Schedule the next pass even if this pass finds an ongoing operation.
     self.root.after(6*60*60*1000,self.periodic_update_check)
@@ -1181,8 +1225,21 @@ class GUI:
  def update_selected_row(self,item):
     if self.can_install_update(item):
         self.update_all({'Questie','QuestieDB'} if item['name'] in ('Questie','QuestieDB') else {item['name']})
-    else:
-        messagebox.showinfo(APP,'Automatic installation is not available for this addon. CurseForge metadata is read-only; use the official download and Install ZIP after verifying compatibility.')
+        return
+    result=self.results.get(item['name'],{})
+    project=result.get('project_id') if result.get('cf_metadata_only') else None
+    cf_file=result.get('latest_cf_file')
+    if project and cf_file and self.cf_key.get().strip():
+        if not messagebox.askyesno(APP,'Open the official CurseForge file page?\n\nDownload the Forever ZIP there, then use Add addon → Install downloaded ZIP. Hino will validate compatibility and back up existing folders.'):
+            return
+        key=self.cf_key.get().strip()
+        def done(url,error):
+            self.busy=False
+            if error:messagebox.showerror(APP,'Could not verify official CurseForge URL:\n'+error)
+            else:webbrowser.open(url)
+        self.task(lambda:cf_official_url(cf_mod(key,project),cf_file),done)
+        return
+    messagebox.showinfo(APP,'Not automatically installable. Go to Discover to open an official Forever-labelled CurseForge file, download the ZIP, then Add addon → Install downloaded ZIP.')
 
  def on_tree_click(self,event):
     if self.tree.identify_column(event.x)!='#7':return
