@@ -1,10 +1,14 @@
 name: Build Windows installer
 on:
   push:
+    branches: ['main']
     tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: hino-windows-release
+  cancel-in-progress: false
 jobs:
   package:
     runs-on: windows-latest
@@ -39,17 +43,27 @@ jobs:
           path: |
             dist/HinoAddonManager-Setup.exe
             dist/HinoAddonManager-Setup.exe.sha256
-      - name: Publish GitHub release assets
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish versioned release automatically
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $source = Get-Content 'hino_selfupdate.py' -Raw
+          $match = [regex]::Match($source, "(?m)^APP_VERSION\s*=\s*['\x22](\d+\.\d+\.\d+)['\x22]")
+          if (-not $match.Success) { throw "APP_VERSION must be a semantic version in hino_selfupdate.py" }
+          $version = $match.Groups[1].Value
+          $installerSource = Get-Content 'HinoAddonManager.iss' -Raw
+          if ($installerSource -notmatch [regex]::Escape('#define AppVersion "' + $version + '"')) {
+            throw "Installer AppVersion does not match $version"
+          }
+          $tag = "v$version"
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne $tag) {
+            throw "Git tag does not match application version $tag"
+          }
           gh release view $tag --json tagName 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag 'dist/HinoAddonManager-Setup.exe' 'dist/HinoAddonManager-Setup.exe.sha256' --clobber
-          } else {
-            gh release create $tag 'dist/HinoAddonManager-Setup.exe' 'dist/HinoAddonManager-Setup.exe.sha256' --title "Hino Addon Manager $tag" --generate-notes
+            Write-Host "Release $tag already exists. Skipping publication to avoid overwriting an existing release."
+            exit 0
           }
-          if ($LASTEXITCODE -ne 0) { throw "Could not publish installer assets for $tag" }
+          gh release create $tag 'dist/HinoAddonManager-Setup.exe' 'dist/HinoAddonManager-Setup.exe.sha256' --target "${{ github.sha }}" --title "Hino Addon Manager $tag" --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw "Could not create $tag" }
