@@ -1620,7 +1620,7 @@ class GUI:
 
  def update_all(self, only_names=None):
     if self.busy:return
-    candidates=[x for x in self.items if self.results.get(x['name'],{}).get('status')=='Update available' and self.results.get(x['name'],{}).get('asset') and (only_names is None or x['name'] in only_names)]
+    candidates=[x for x in self.items if self.can_install_update(x) and (only_names is None or x['name'] in only_names)]
     if not candidates:
         messagebox.showinfo(APP,'No verified automatic updates available. GitHub-based addons with a declared source can update automatically after compatibility checks. Some providers do not offer direct downloads.');return
     groups={}
