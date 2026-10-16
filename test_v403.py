@@ -4,7 +4,7 @@ import hino_selfupdate as updater
 
 class V403ReleaseTests(unittest.TestCase):
     def test_expected_app_version(self):
-        self.assertEqual(updater.APP_VERSION, '4.1.1')
+        self.assertEqual(updater.APP_VERSION, '4.1.2')
 
     def test_v402_will_detect_v403(self):
         tag = 'v4.0.3'
