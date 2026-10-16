@@ -719,7 +719,7 @@ def download_asset(asset, target, progress=None, cancelled=None, max_seconds=150
 
 class GUI:
  def __init__(self,root):
-    self.root=root;root.title('Hino Addon Manager V4.0.2 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
+    self.root=root;root.title('Hino Addon Manager V4.0.3 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
     self.cfg=load_config();self.items=[];self.busy=False;self.results={};self.cancel_event=threading.Event();self.update_in_progress=False;self.expanded_addon=None;self.collapsed_groups={'Bagnon family','GearQuest Forever','Questie + QuestieDB','Polestar Guides'};self.backup_paths=[];self._backup_loaded=False;self._backup_loading=False;self._backup_request=0
     # V3.7 visual system: editorial, charcoal-and-ivory desktop workspace.
     # Intentionally replaces the old green sidebar and dashboard identity.
