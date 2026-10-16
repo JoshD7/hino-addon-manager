@@ -5,7 +5,7 @@ import hino_selfupdate as updater
 
 class UpdaterHandoffTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(updater.APP_VERSION, '4.2.0')
+        self.assertEqual(updater.APP_VERSION, '4.2.1')
 
     def test_reject_invalid_version(self):
         with patch.object(updater.sys, 'platform', 'win32'):
