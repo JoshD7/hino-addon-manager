@@ -3,7 +3,7 @@ import hino_selfupdate as updater
 
 class AppVersionTests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(updater.APP_VERSION, '4.2.0')
+        self.assertEqual(updater.APP_VERSION, '4.2.1')
 
     def test_only_newer_release(self):
         base = f'https://github.com/{updater.REPOSITORY}/releases/download/v4.0.2/'
