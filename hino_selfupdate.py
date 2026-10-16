@@ -10,7 +10,7 @@ import tempfile
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
 
-APP_VERSION = '4.0.1'
+APP_VERSION = '4.0.2'
 REPOSITORY = 'JoshD7/hino-addon-manager'
 API_URL = f'https://api.github.com/repos/{REPOSITORY}/releases/latest'
 SETUP_NAME = 'HinoAddonManager-Setup.exe'
@@ -70,8 +70,26 @@ def stage_installer(update):
     path.write_bytes(content)
     return path
 
-def run_installer(installer):
-    """Inno Setup per-user installer; GUI must close after launching."""
+def helper_path():
+    """Independent PowerShell helper installed alongside the application EXE."""
+    root = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
+    return root / 'HinoUpdateHelper.ps1'
+
+def run_installer(installer, expected_version):
+    """Hand off to a separate process that waits for Hino to exit."""
     if sys.platform != 'win32':
         raise OSError('Self-updates require Windows')
-    return subprocess.Popen([str(installer), '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS'], close_fds=True)
+    if not parsed_version(expected_version):
+        raise ValueError('Invalid target version')
+    script = helper_path()
+    if not script.is_file():
+        raise FileNotFoundError('Update helper is missing; install V4.0.2 once manually.')
+    exe = Path(sys.executable).resolve()
+    log_dir = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'HinoAddonManager' / 'UpdateLogs'
+    return subprocess.Popen([
+        'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-WindowStyle', 'Hidden', '-File', str(script),
+        '-Installer', str(Path(installer).resolve()), '-ParentPid', str(os.getpid()),
+        '-ExpectedVersion', expected_version, '-InstallDir', str(exe.parent),
+        '-LogDir', str(log_dir)
+    ], creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), close_fds=True)
