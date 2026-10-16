@@ -1,5 +1,5 @@
 #define AppName "Hino Addon Manager"
-#define AppVersion "4.2.0"
+#define AppVersion "4.2.1"
 [Setup]
 AppId={{C7BD2612-32C6-4DFE-9DF8-FA49E4C0762A}
 AppName={#AppName}
@@ -20,6 +20,7 @@ WizardStyle=modern
 [Files]
 Source: "dist\HinoAddonManager.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "HinoUpdateHelper.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "HinoAddonManager.version"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\Hino Addon Manager"; Filename: "{app}\HinoAddonManager.exe"
 Name: "{autodesktop}\Hino Addon Manager"; Filename: "{app}\HinoAddonManager.exe"; Tasks: desktopicon
