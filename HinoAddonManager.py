@@ -740,7 +740,7 @@ def download_asset(asset, target, progress=None, cancelled=None, max_seconds=150
 
 class GUI:
  def __init__(self,root):
-    self.root=root;root.title('Hino Addon Manager V4.1.1 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
+    self.root=root;root.title('Hino Addon Manager V4.1.2 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
     self.cfg=load_config();self.items=[];self.busy=False;self.results={};self.cancel_event=threading.Event();self.update_in_progress=False;self.expanded_addon=None;self.collapsed_groups={'Bagnon family','GearQuest Forever','Questie + QuestieDB','Polestar Guides'};self.backup_paths=[];self._backup_loaded=False;self._backup_loading=False;self._backup_request=0
     # V3.7 visual system: editorial, charcoal-and-ivory desktop workspace.
     # Intentionally replaces the old green sidebar and dashboard identity.
@@ -962,6 +962,7 @@ class GUI:
         ttk.Button(extra,text=title,command=lambda k=key:self.show_page(k)).pack(side='left',padx=(0,9))
     tk.Label(settings,text='APPLICATION UPDATES',bg=bg,fg=muted,font=('Segoe UI',10,'bold')).pack(anchor='w',pady=(24,8))
     ttk.Button(settings,text='Check Hino app update',command=self.check_app_update).pack(anchor='w')
+    ttk.Button(settings,text='Restart to update',command=self.restart_ready_hino_update).pack(anchor='w',pady=(8,0))
     tk.Label(settings,text='App updates come from official GitHub Releases, separate from addon updates.',bg=bg,fg=muted).pack(anchor='w',pady=(5,0))
     ttk.Button(settings,text='Open addon folder',command=self.open_folder).pack(anchor='w',pady=(12,0))
 
@@ -1022,12 +1023,33 @@ class GUI:
                 self.status.set('Hino application update failed; existing app unchanged.')
                 messagebox.showerror(APP,'Update verification failed: '+error)
                 return
-            try:selfupdate.run_installer(installer, release['version'])
-            except Exception as exc:
-                messagebox.showerror(APP,'Could not launch installer: '+str(exc));return
-            self.root.destroy()
+            self.status.set('Hino '+release['version']+' downloaded and verified. Ready to restart.')
+            self.progress_label.set('Update ready')
+            if not messagebox.askyesno(APP,'Hino '+release['version']+' is ready.\n\nRestart Hino now to install?\n\nThe app will briefly close and reopen. WoW addons will not be touched.'):
+                self._ready_hino_update=(installer,release['version'])
+                self.status.set('Update downloaded. Settings → Restart to update when ready.')
+                return
+            self._restart_hino_update(installer,release['version'])
         self.root.after(0,done)
     threading.Thread(target=worker,daemon=True).start()
+
+ def restart_ready_hino_update(self):
+    pending=getattr(self,'_ready_hino_update',None)
+    if not pending:
+        messagebox.showinfo(APP,'No prepared app update. Use Check Hino app update first.')
+        return
+    self._restart_hino_update(*pending)
+
+ def _restart_hino_update(self,installer,version):
+    if self.busy or self.update_in_progress:
+        messagebox.showwarning(APP,'Finish the current addon operation before restarting Hino.')
+        return
+    try:selfupdate.run_installer(installer,version)
+    except Exception as exc:
+        messagebox.showerror(APP,'Could not start Hino update: '+str(exc))
+        return
+    self.status.set('Restarting Hino to complete update...')
+    self.root.destroy()
 
  def cf_save_key(self):
     try:
