@@ -209,14 +209,21 @@ def curseforge_url(item):
     return 'https://www.curseforge.com/wow/addons/'+project if re.fullmatch(r'\d{1,12}',str(project)) else ''
 
 def source_from_metadata(item):
-    """Only link explicitly declared GitHub projects, never guessed addon names."""
+    """Use only a GitHub repository URL with a genuine GitHub hostname."""
+    from urllib.parse import urlsplit
     candidates=item.get('source_candidates') or [item.get('source','')]
     for value in candidates:
-        url=str(value).strip()
-        match=re.search(r'(?:https?://)?(?:www\.)?github\.com/([\w.-]+)/([\w.-]+)',url,re.I)
-        if match:
-            try:return parse_repo(match.group(1)+'/'+match.group(2))
-            except ValueError:continue
+        raw=str(value).strip()
+        if not raw:continue
+        try:
+            url=urlsplit(raw if '://' in raw else 'https://'+raw)
+            if url.scheme not in ('http','https') or (url.hostname or '').lower() not in ('github.com','www.github.com'):
+                continue
+            if url.username or url.password or url.port not in (None,443,80):continue
+            parts=url.path.strip('/').split('/')
+            if len(parts)<2:continue
+            return parse_repo(parts[0]+'/'+parts[1].removesuffix('.git'))
+        except (ValueError,AttributeError):continue
     return None
 
 
@@ -228,12 +235,14 @@ def compatible_interfaces(old, new):
 
 
 def candidate_github_asset(item, release):
-    """Conservative candidate selection: single release ZIP and newer version tag."""
-    if not release or not release.get('tag'):return None
-    assets=[a for a in release.get('assets',[]) if a.get('name','').lower().endswith('.zip') and a.get('browser_download_url')]
+    """A generic GitHub ZIP is a candidate only with an unambiguous version."""
+    tag=str(release.get('tag','')) if release else ''
+    if not re.fullmatch(r'v?\d+\.\d+\.\d+(?:\.\d+)?',tag,re.I):return None
+    assets=[a for a in release.get('assets',[]) if isinstance(a,dict) and
+            a.get('name','').lower().endswith('.zip') and a.get('browser_download_url')]
     if len(assets)!=1:return None
     local=version_tuple(item.get('version',''))
-    remote=version_tuple(release.get('tag',''))
+    remote=version_tuple(tag)
     if not local or not remote or remote<=local:return None
     return assets[0]
 
@@ -740,7 +749,7 @@ def download_asset(asset, target, progress=None, cancelled=None, max_seconds=150
 
 class GUI:
  def __init__(self,root):
-    self.root=root;root.title('Hino Addon Manager V4.1.2 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
+    self.root=root;root.title('Hino Addon Manager V4.2.0 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
     self.cfg=load_config();self.items=[];self.busy=False;self.results={};self.cancel_event=threading.Event();self.update_in_progress=False;self.expanded_addon=None;self.collapsed_groups={'Bagnon family','GearQuest Forever','Questie + QuestieDB','Polestar Guides'};self.backup_paths=[];self._backup_loaded=False;self._backup_loading=False;self._backup_request=0
     # V3.7 visual system: editorial, charcoal-and-ivory desktop workspace.
     # Intentionally replaces the old green sidebar and dashboard identity.
