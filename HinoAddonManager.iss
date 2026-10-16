@@ -1,5 +1,5 @@
 #define AppName "Hino Addon Manager"
-#define AppVersion "4.1.1"
+#define AppVersion "4.1.2"
 [Setup]
 AppId={{C7BD2612-32C6-4DFE-9DF8-FA49E4C0762A}
 AppName={#AppName}
