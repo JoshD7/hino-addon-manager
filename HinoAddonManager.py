@@ -749,8 +749,17 @@ def download_asset(asset, target, progress=None, cancelled=None, max_seconds=150
 
 class GUI:
  def __init__(self,root):
-    self.root=root;root.title('Hino Addon Manager V4.2.1 · WoW Forever');root.geometry('1100x740');root.minsize(880,570)
-    self.cfg=load_config();self.items=[];self.busy=False;self.results={};self.cancel_event=threading.Event();self.update_in_progress=False;self.expanded_addon=None;self.collapsed_groups={'Bagnon family','GearQuest Forever','Questie + QuestieDB','Polestar Guides'};self.backup_paths=[];self._backup_loaded=False;self._backup_loading=False;self._backup_request=0
+    self.root=root;root.title('Hino Addon Manager V4.2.2 · WoW Forever')
+     self.cfg=load_config()
+     screen_w=root.winfo_screenwidth();screen_h=root.winfo_screenheight()
+     saved=self.cfg.get('window',{}) if isinstance(self.cfg.get('window',{}),dict) else {}
+     width=min(max(880,int(saved.get('width',1280))),max(1,screen_w-30))
+     height=min(max(570,int(saved.get('height',800))),max(1,screen_h-90))
+     root.geometry(f'{width}x{height}+{max(0,(screen_w-width)//2)}+{max(0,(screen_h-height)//2)}')
+     root.minsize(min(880,screen_w),min(570,screen_h))
+     self._startup_maximized=bool(saved.get('maximized',True))
+     root.protocol('WM_DELETE_WINDOW',self.close_window)
+    self.items=[];self.busy=False;self.results={};self.cancel_event=threading.Event();self.update_in_progress=False;self.expanded_addon=None;self.collapsed_groups={'Bagnon family','GearQuest Forever','Questie + QuestieDB','Polestar Guides'};self.backup_paths=[];self._backup_loaded=False;self._backup_loading=False;self._backup_request=0
     # V3.7 visual system: editorial, charcoal-and-ivory desktop workspace.
     # Intentionally replaces the old green sidebar and dashboard identity.
     self.bg='#0c1018';self.panel='#161c28';self.panel2='#202939';self.fg='#f4f7fc';self.green='#91b7ff';self.muted='#91a0b6';self.edge='#293444'
@@ -855,6 +864,8 @@ class GUI:
     scroll=ttk.Scrollbar(tablebox,orient='vertical',command=self.tree.yview)
     self.tree.configure(yscrollcommand=scroll.set)
     scroll.pack(side='right',fill='y');self.tree.pack(side='left',fill='both',expand=True)
+    tablebox.bind('<Configure>',self.fit_addon_columns)
+    self.root.after_idle(self.fit_addon_columns)
     self.tree.bind('<Double-1>',lambda e:self.show_selected_details())
     self.tree.bind('<ButtonRelease-1>',self.on_tree_click,add='+')
     self.search_text.trace_add('write',lambda *_:self.render_addon_list())
@@ -940,7 +951,23 @@ class GUI:
     # Double-click a result to load versions, without requiring a modal popup.
     self.cf_tree.bind('<Double-1>',lambda event:self.cf_show_files())
     # Settings: no more technical buttons cluttering dashboard.
-    settings=self.pages['settings']
+    settings_page=self.pages['settings']
+    settings_canvas=tk.Canvas(settings_page,bg=bg,highlightthickness=0,borderwidth=0)
+    settings_scroll=ttk.Scrollbar(settings_page,orient='vertical',command=settings_canvas.yview)
+    settings_canvas.configure(yscrollcommand=settings_scroll.set)
+    settings_scroll.pack(side='right',fill='y')
+    settings_canvas.pack(side='left',fill='both',expand=True)
+    settings=tk.Frame(settings_canvas,bg=bg)
+    settings_window=settings_canvas.create_window((0,0),window=settings,anchor='nw')
+    settings.bind('<Configure>',lambda event:settings_canvas.configure(scrollregion=settings_canvas.bbox('all')))
+    settings_canvas.bind('<Configure>',lambda event:settings_canvas.itemconfigure(settings_window,width=event.width))
+    def scroll_settings(event):
+        if settings_page.winfo_ismapped():settings_canvas.yview_scroll(-int(event.delta/120),'units')
+    settings_canvas.bind('<MouseWheel>',scroll_settings)
+    settings.bind('<MouseWheel>',scroll_settings)
+    for child in (settings_canvas,settings):
+        child.bind('<Enter>',lambda event:self.root.bind_all('<MouseWheel>',scroll_settings))
+        child.bind('<Leave>',lambda event:self.root.unbind_all('<MouseWheel>'))
     tk.Label(settings,text='GAME LOCATION',bg=bg,fg=muted,font=('Segoe UI',10,'bold')).pack(anchor='w',pady=(0,7))
     location=tk.Frame(settings,bg=panel,padx=12,pady=12);location.pack(fill='x')
     tk.Entry(location,textvariable=self.path,bg='#1b2432',fg=fg,insertbackground=fg,relief='flat',font=('Segoe UI',10)).pack(side='left',fill='x',expand=True,ipady=8)
@@ -994,7 +1021,29 @@ class GUI:
     root.after(100,self.refresh)
     if self.auto_check.get():root.after(3000,self.check_all)
     root.after(6*60*60*1000,self.periodic_update_check)
+    if self._startup_maximized:root.after_idle(lambda:root.state('zoomed') if root.winfo_exists() else None)
     if getattr(sys, "frozen", False):root.after(7500,self.check_app_update_silently)
+
+ def close_window(self):
+    try:
+        maximized=self.root.state()=='zoomed'
+        win=self.cfg.setdefault('window',{})
+        win['maximized']=maximized
+        if not maximized:
+            win['width']=self.root.winfo_width()
+            win['height']=self.root.winfo_height()
+        save_config(self.cfg)
+    except Exception:pass
+    self.root.destroy()
+
+ def fit_addon_columns(self,event=None):
+    if not hasattr(self,'tree') or not self.tree.winfo_exists():return
+    total=max(740,self.tree.winfo_width()-24)
+    minimum={'#0':92,'title':130,'version':80,'latest':75,'interface':72,'source':88,'status':125,'action':75}
+    extra=max(0,total-sum(minimum.values()))
+    weights={'#0':0.06,'title':0.30,'version':0.09,'latest':0.09,'interface':0.05,'source':0.11,'status':0.21,'action':0.09}
+    for col,small in minimum.items():
+        self.tree.column(col,width=small+int(extra*weights[col]),minwidth=small,stretch=False)
 
  def check_app_update_silently(self):
     self._check_hino_update(silent=True)
