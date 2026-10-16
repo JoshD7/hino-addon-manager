@@ -10,7 +10,7 @@ class SelfUpdateTests(unittest.TestCase):
  def test_matching_release(self):
   p=f'https://github.com/{u.REPOSITORY}/releases/download/v4.0.2/'
   data={'tag_name':'v4.0.2','assets':[{'name':n,'browser_download_url':p+n} for n in (u.SETUP_NAME,u.HASH_NAME)]}
-  self.assertEqual(u.select_update(data)['version'],'4.0.2')
+  self.assertEqual(u.select_update(data,current='4.0.1')['version'],'4.0.2')
   self.assertIsNone(u.select_update(data,current='4.1.0'))
  def test_checksum(self):
   self.assertEqual(u.parse_checksum(('a'*64+'  '+u.SETUP_NAME).encode()),'a'*64)
