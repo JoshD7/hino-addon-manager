@@ -10,7 +10,7 @@ import tempfile
 from urllib.request import Request, urlopen
 from urllib.parse import urlsplit
 
-APP_VERSION = '4.0.0'
+APP_VERSION = '4.0.1'
 REPOSITORY = 'JoshD7/hino-addon-manager'
 API_URL = f'https://api.github.com/repos/{REPOSITORY}/releases/latest'
 SETUP_NAME = 'HinoAddonManager-Setup.exe'
