@@ -1,0 +1,48 @@
+name: Build Windows installer
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install packaging tools
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip pyinstaller tkinterdnd2 truststore
+          choco install innosetup --yes --no-progress
+      - name: Run tests
+        run: python -m unittest discover -p 'test_*.py' -v
+      - name: Build app exe
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name HinoAddonManager --collect-all tkinterdnd2 --hidden-import hino_selfupdate HinoAddonManager.py
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" HinoAddonManager.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Write installer checksum
+        shell: pwsh
+        run: |
+          $p = 'dist/HinoAddonManager-Setup.exe'
+          $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLower()
+          "$h  HinoAddonManager-Setup.exe" | Set-Content -Encoding ascii 'dist/HinoAddonManager-Setup.exe.sha256'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HinoAddonManager-Windows-Installer
+          path: |
+            dist/HinoAddonManager-Setup.exe
+            dist/HinoAddonManager-Setup.exe.sha256
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "${{ github.ref_name }}" 'dist/HinoAddonManager-Setup.exe' 'dist/HinoAddonManager-Setup.exe.sha256' --title "Hino Addon Manager ${{ github.ref_name }}" --generate-notes
